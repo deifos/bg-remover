@@ -5,15 +5,17 @@ import {
   AutoModel,
   AutoProcessor,
   RawImage,
+  pipeline,
 } from "@huggingface/transformers";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { db } from './db';
+import { db } from "./db";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Images } from "./components/Images";
 import { processImages } from "../lib/process";
 
+type CaptionModelType = ((input: any) => Promise<any>) | null;
 export default function App() {
   const [images, setImages] = useState([]);
 
@@ -22,10 +24,11 @@ export default function App() {
   const [isDownloadReady, setIsDownloadReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-
+  const [captions, setCaptions] = useState({});
   const modelRef = useRef(null);
   const processorRef = useRef(null);
 
+  const [captionModel, setCaptionModel] = useState<CaptionModelType>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -41,6 +44,12 @@ export default function App() {
         //  Fetch images from IndexedDB
         // const images = await db.images.toArray();
         // setImages(images.map((image) => URL.createObjectURL(image.file)));
+
+        const captionModelLoaded = await pipeline(
+          "image-to-text",
+          "Xenova/vit-gpt2-image-captioning"
+        );
+        setCaptionModel(() => captionModelLoaded);
       } catch (err) {
         setError(err);
       }
@@ -81,7 +90,7 @@ export default function App() {
   const removeImage = (index) => {
     setImages((prevImages) => prevImages.filter((_, i) => i !== index));
     setProcessedImages((prevProcessed) =>
-      prevProcessed.filter((_, i) => i !== index),
+      prevProcessed.filter((_, i) => i !== index)
     );
   };
 
@@ -105,7 +114,7 @@ export default function App() {
       const maskData = (
         await RawImage.fromTensor(output[0].mul(255).to("uint8")).resize(
           img.width,
-          img.height,
+          img.height
         )
       ).data;
 
@@ -160,7 +169,7 @@ export default function App() {
               resolve(null);
             }, "image/png");
           };
-        }),
+        })
     );
 
     await Promise.all(promises);
@@ -219,7 +228,9 @@ export default function App() {
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-4"></div>
-          <p className="text-lg">Loading background removal model...</p>
+          <p className="text-lg">
+            Loading background removal and caption model...
+          </p>
         </div>
       </div>
     );
@@ -270,7 +281,11 @@ export default function App() {
           className={`p-8 mb-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors duration-300 ease-in-out
             ${isDragAccept ? "border-green-500 bg-green-900/20" : ""}
             ${isDragReject ? "border-red-500 bg-red-900/20" : ""}
-            ${isDragActive ? "border-blue-500 bg-blue-900/20" : "border-gray-700 hover:border-blue-500 hover:bg-blue-900/10"}
+            ${
+              isDragActive
+                ? "border-blue-500 bg-blue-900/20"
+                : "border-gray-700 hover:border-blue-500 hover:bg-blue-900/10"
+            }
           `}
         >
           <input {...getInputProps()} className="hidden" />
@@ -299,9 +314,9 @@ export default function App() {
           </div>
         </div>
 
-        <Images/>
+        <Images captionModel={captionModel} />
         {/* Old */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {/* <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {images.map((src, index) => (
             <div key={index} className="relative group">
               <img
@@ -309,6 +324,11 @@ export default function App() {
                 alt={`Image ${index + 1}`}
                 className="rounded-lg object-cover w-full h-48"
               />
+              {captions[index] && (
+                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 p-2 text-sm">
+                  {captions[index]}
+                </div>
+              )}
               {processedImages[index] && (
                 <div className="absolute inset-0 bg-black bg-opacity-70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg flex items-center justify-center">
                   <button
@@ -327,6 +347,13 @@ export default function App() {
                   >
                     Download
                   </button>
+                  <button
+                    onClick={() => generateCaption(index)}
+                    className="mx-2 px-3 py-1 bg-white text-gray-900 rounded-md hover:bg-gray-200 transition-colors duration-200 text-sm"
+                    aria-label={`Generate caption for image ${index + 1}`}
+                  >
+                    Caption
+                  </button>
                 </div>
               )}
               <button
@@ -338,7 +365,7 @@ export default function App() {
               </button>
             </div>
           ))}
-        </div>
+        </div> */}
       </div>
     </div>
   );
